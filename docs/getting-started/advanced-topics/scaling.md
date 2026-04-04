@@ -26,7 +26,7 @@ This is perfect for personal use, small teams, or evaluation. The scaling journe
 
 ---
 
-## Step 1 — Switch to PostgreSQL
+## Step 1 — Switch to an External SQL Database (PostgreSQL, MariaDB)
 
 **When:** You plan to run more than one Open WebUI instance, or you want better performance and reliability for your database. **You should also switch if your SQLite file lives on anything other than a locally-attached SSD/NVMe** — see the callout below.
 
@@ -34,14 +34,21 @@ This is perfect for personal use, small teams, or evaluation. The scaling journe
 **Staying on SQLite is fine for:** single-replica deployments, personal use, evaluation, home lab setups, and small teams — **as long as the database file lives on a locally-attached SSD/NVMe and you're not running multiple replicas or workers.** The 0.8 → 0.9 async-backend story only bites when `webui.db` is on network storage; on local disk, SQLite is fast, supported, and a perfectly reasonable default. No migration needed. Skip this step and move on to whichever later step you actually need.
 :::
 
-SQLite stores everything in a single file and doesn't handle concurrent writes from multiple processes well. PostgreSQL is a production-grade database that supports many simultaneous connections.
+SQLite stores everything in a single file and doesn't handle concurrent writes from multiple processes well. For production deployments, switch to an external SQL database such as **PostgreSQL** or **MariaDB**.
 
 **What to do:**
 
-Set the `DATABASE_URL` environment variable to point to your PostgreSQL server:
+Set the `DATABASE_URL` environment variable to point to your database server:
 
 ```
+# PostgreSQL
 DATABASE_URL=postgresql://user:password@db-host:5432/openwebui
+
+# MariaDB (recommended when using MariaDB specifically)
+DATABASE_URL=mariadb+mariadbconnector://user:password@db-host:3306/openwebui
+
+# MySQL-compatible / PyMySQL alternative
+DATABASE_URL=mysql+pymysql://user:password@db-host:3306/openwebui
 ```
 
 **Key things to know:**
@@ -52,7 +59,7 @@ DATABASE_URL=postgresql://user:password@db-host:5432/openwebui
 - If you skip this step and run multiple instances with SQLite, you will see `database is locked` errors and data corruption. See [Database Corruption / "Locked" Errors](/troubleshooting/multi-replica#4-database-corruption--locked-errors) for details.
 
 :::tip
-A good starting point for tuning is `DATABASE_POOL_SIZE=15` and `DATABASE_POOL_MAX_OVERFLOW=20`. Keep the combined total per instance well below your PostgreSQL `max_connections` limit (default is 100).
+A good starting point for tuning is `DATABASE_POOL_SIZE=15` and `DATABASE_POOL_MAX_OVERFLOW=20`. Keep the combined total per instance well below your database server's connection limit. For example, PostgreSQL's default `max_connections` limit is 100.
 :::
 
 ### Why SQLite on network storage fails the moment you scale (or upgrade)
@@ -121,7 +128,7 @@ For a complete step-by-step Redis setup (Docker Compose, Sentinel, Cluster mode,
 Open WebUI is stateless, so you can run as many instances as needed behind a **load balancer**. Each instance is identical and interchangeable.
 
 :::warning
-Before running multiple instances, ensure you have completed **Steps 1 and 2** (PostgreSQL and Redis). You also need a shared `WEBUI_SECRET_KEY` across all replicas — without it, users will experience [login loops and 401 errors](/troubleshooting/multi-replica#1-login-loops--401-unauthorized-errors). For a full pre-flight checklist, see the [Core Requirements Checklist](/troubleshooting/multi-replica#core-requirements-checklist).
+Before running multiple instances, ensure you have completed **Steps 1 and 2** (external SQL database and Redis). You also need a shared `WEBUI_SECRET_KEY` across all replicas — without it, users will experience [login loops and 401 errors](/troubleshooting/multi-replica#1-login-loops--401-unauthorized-errors). For a full pre-flight checklist, see the [Core Requirements Checklist](/troubleshooting/multi-replica#core-requirements-checklist).
 :::
 
 ### Option A: Container Orchestration (Recommended)
@@ -140,7 +147,7 @@ For simpler setups (e.g., a single powerful server), increase `UVICORN_WORKERS`:
 UVICORN_WORKERS=4
 ```
 
-This spawns multiple application processes inside a single container. You still need PostgreSQL and Redis when using this approach.
+This spawns multiple application processes inside a single container. You still need an external SQL database and Redis when using this approach.
 
 :::info
 Container orchestration is generally preferred because it provides automatic restarts, rolling updates, and more granular resource control. Multiple workers inside a single container is a simpler alternative when orchestration isn't available.
@@ -195,6 +202,8 @@ Only PGVector and ChromaDB will be consistently maintained by the Open WebUI tea
 
 :::tip
 **PGVector** is the simplest choice if you're already running PostgreSQL for the main database — it adds vector search to the database you already have, with no additional infrastructure.
+
+If you're standardizing on MariaDB for the primary database, **MariaDB Vector** provides a similar single-database-system deployment model for both application data and vector search.
 
 For maximum scalability in self-hosted environments, **Milvus** and **Qdrant** both support **multitenancy mode** (`ENABLE_MILVUS_MULTITENANCY_MODE=True` / `ENABLE_QDRANT_MULTITENANCY_MODE=True`), which provides better resource sharing at scale.
 :::
@@ -386,7 +395,7 @@ ENABLE_DB_MIGRATIONS=false
 
 ## Quick Reference: When Do I Need What?
 
-| Scenario | PostgreSQL | Redis | External Vector DB | Ext. Content Extraction | Ext. Embeddings | Shared Storage |
+| Scenario | External SQL DB | Redis | External Vector DB | Ext. Content Extraction | Ext. Embeddings | Shared Storage |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Single user / evaluation | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | Small team (< 50 users, single instance) | Recommended | Recommended† | ✗ | Recommended | ✗ | ✗ |
